@@ -159,6 +159,7 @@ def main_worker(gpu, ngpus, args):
     while continue_training:
         train_logs = []
         model.train()
+        print("start training")
 
         start_time = time.time()
         for _, batch in enumerate(train_loader):

@@ -7,6 +7,7 @@ from torch.nn import functional as F
 from torchvision import datasets
 import torchvision.transforms as transforms
 from utils import datautils
+from utils.datautils import CustomDataset
 import models
 from utils import utils
 import numpy as np
@@ -79,6 +80,15 @@ class BaseSSL(nn.Module):
             valdir = os.path.join(self.IMAGENET_PATH, 'val')
             self.trainset = datasets.ImageFolder(traindir, transform=train_transform)
             self.testset = datasets.ImageFolder(valdir, transform=test_transform)
+        elif self.hparams.data == 'custom':
+            self.trainset = CustomDataset(
+                root_dir='output',
+                transform=train_transform
+            )
+            self.testset = self.trainset
+            for i in range(5):  # Save first 5 pairs
+                self.trainset.save_sample(i)
+
         else:
             raise NotImplementedError
 
@@ -266,6 +276,17 @@ class SimCLR(BaseSSL):
                 datautils.Clip(),
             ])
             test_transform = train_transform
+        
+        elif self.hparams.data == 'custom':  # Add this case
+            train_transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.RandomHorizontalFlip(),
+                datautils.get_color_distortion(s=self.hparams.color_dist_s),
+                transforms.ToTensor(),
+                datautils.Clip(),
+            ])
+            test_transform = train_transform
+        
         return train_transform, test_transform
 
     def get_ckpt(self):

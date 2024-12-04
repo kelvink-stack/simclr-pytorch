@@ -6,6 +6,9 @@ import torch.utils.data
 import PIL
 import torchvision.transforms.functional as FT
 from PIL import Image
+from torch.utils.data import Dataset
+import re
+from itertools import combinations
 
 
 if 'DATA_ROOT' in os.environ:
@@ -162,3 +165,53 @@ class DummyOutputWrapper(torch.utils.data.dataset.Dataset):
 
     def __len__(self):
         return len(self.dataset)
+    
+
+class CustomDataset(Dataset):
+    def __init__(self, root_dir, transform=None):
+        self.root_dir = root_dir
+        self.transform = transform
+        self.object_folders = sorted([f for f in os.listdir(root_dir) 
+                                    if os.path.isdir(os.path.join(root_dir, f))])
+        print(self.object_folders[0])
+        
+        self.pairs = []
+        
+        for obj_id, folder in enumerate(self.object_folders):
+            obj_path = os.path.join(root_dir, folder)
+            frames = sorted([f for f in os.listdir(obj_path) if f.endswith('.jpg')])
+            frames.sort(key=lambda x: int(re.search(r'frame_(\d+)', x).group(1)))
+            
+            # Generate all possible pairs for this object
+            frame_paths = [os.path.join(obj_path, frame) for frame in frames]
+            obj_pairs = list(combinations(frame_paths, 2))
+            self.pairs.extend([(path1, path2, obj_id) for path1, path2 in obj_pairs])
+        print("Positive pairs created")
+            
+    def __len__(self):
+        return len(self.pairs)
+        
+    def __getitem__(self, idx):
+        img1_path, img2_path, obj_id = self.pairs[idx]
+        
+        img1 = Image.open(img1_path).convert('RGB')
+        img2 = Image.open(img2_path).convert('RGB')
+        
+        if self.transform:
+            img1 = self.transform(img1)
+            img2 = self.transform(img2)
+        
+        return torch.stack([img1, img2]), obj_id
+    
+    def save_sample(self, idx, save_dir='pair_samples'):
+        """Save a pair of images to visualize the positive pairs"""
+        os.makedirs(save_dir, exist_ok=True)
+        
+        img_pair, obj_id = self[idx]
+        # Convert tensor to PIL images
+        img1 = transforms.ToPILImage()(img_pair[0])
+        img2 = transforms.ToPILImage()(img_pair[1])
+        
+        # Save images
+        img1.save(f'{save_dir}/pair_{idx}_obj{obj_id}_1.jpg')
+        img2.save(f'{save_dir}/pair_{idx}_obj{obj_id}_2.jpg')
